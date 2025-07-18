@@ -666,6 +666,12 @@ body, .container {
     max-width: 100vw;
 }
 
+@media (max-width: 800px) {
+    .day {
+        min-height: 70px;
+        padding: 6px;
+    }
+}
 @media (max-width: 600px) {
     .calendar-page, .content, .container {
         padding: 4px !important;
@@ -678,8 +684,8 @@ body, .container {
         font-size: 12px;
     }
     .day {
-        min-height: 48px;
-        padding: 2px;
+        min-height: 60px;
+        padding: 4px;
     }
     .schedule-item-mini {
         font-size: 9px;
