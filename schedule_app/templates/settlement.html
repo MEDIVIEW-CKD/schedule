@@ -1,0 +1,301 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="settlement-page">
+    <div class="settlement-header">
+        <button class="nav-btn" onclick="changeMonth(-1)">◀</button>
+        <h2>{{ year }}년 {{ month }}월 정산</h2>
+        <button class="nav-btn" onclick="changeMonth(1)">▶</button>
+    </div>
+    
+    <div class="settlement-content">
+        <!-- 월별 합산 요약 -->
+        <div class="summary-section">
+            <div class="summary-header">
+                <h3>월별 합산</h3>
+                <button class="tax-exclude-btn" onclick="toggleTaxExclude()" id="taxExcludeBtn">세금제외</button>
+            </div>
+            <div class="summary-cards">
+                {% for center_name, total_amount_center, count in monthly_summary %}
+                    <div class="summary-card" data-original-amount="{{ total_amount_center }}">
+                        <div class="card-title">{{ center_name }}</div>
+                        <div class="card-amount">{{ "{:,}".format(total_amount_center) }}원</div>
+                        <div class="card-count">{{ count }}건</div>
+                    </div>
+                {% endfor %}
+                <div class="summary-card total" data-original-amount="{{ total_amount or 0 }}">
+                    <div class="card-title">총합</div>
+                    <div class="card-amount">
+                        {% if total_amount is defined and total_amount is not none %}
+                            {{ "{:,}".format(total_amount) }}원
+                        {% else %}
+                            0원
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- 센터별 기준인원 금액 설정 -->
+        <div class="pricing-settings-section">
+            <div class="settings-header">
+                <h3>센터별 기준인원 금액 설정</h3>
+                <button class="settings-toggle-btn" onclick="toggleSettings()">설정</button>
+            </div>
+            <div class="pricing-settings" id="pricingSettings" style="display: none;">
+                {% for center_name, base_people, above_amount, below_amount in center_pricing %}
+                    <div class="pricing-setting-item" data-center="{{ center_name }}">
+                        <div class="pricing-info">
+                            <div class="center-name">{{ center_name }}</div>
+                            <div class="base-people-setting">
+                                <label>기준인원:</label>
+                                <input type="number" 
+                                       value="{{ base_people }}" 
+                                       min="1"
+                                       class="base-people-input"
+                                       onchange="updatePricingFromItem(this)">
+                                명
+                            </div>
+                        </div>
+                        <div class="pricing-amounts">
+                            <div class="amount-setting">
+                                <label>기준인원 이상:</label>
+                                <input type="number" 
+                                       value="{{ above_amount }}" 
+                                       class="above-amount-input"
+                                       onchange="updatePricingFromItem(this)"
+                                       placeholder="금액">
+                                <span>원</span>
+                            </div>
+                            <div class="amount-setting">
+                                <label>기준인원 미만:</label>
+                                <input type="number" 
+                                       value="{{ below_amount }}" 
+                                       class="below-amount-input"
+                                       onchange="updatePricingFromItem(this)"
+                                       placeholder="금액">
+                                <span>원</span>
+                            </div>
+                        </div>
+                    </div>
+                {% endfor %}
+                <button class="add-center-btn" onclick="showAddCenterForm()">새 센터 추가</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- 새 센터 추가 모달 -->
+<div id="addCenterModal" class="modal">
+    <div class="modal-content">
+        <div class="modal-header">
+            <h3>새 센터 추가</h3>
+            <span class="close" onclick="closeAddCenterModal()">&times;</span>
+        </div>
+        <form id="addCenterForm">
+            <div class="form-group">
+                <label for="newCenterName">센터명</label>
+                <input type="text" id="newCenterName" required placeholder="센터명을 입력하세요">
+            </div>
+            <div class="form-group">
+                <label for="newBasePeople">기준인원</label>
+                <input type="number" id="newBasePeople" value="2" min="1" required>
+            </div>
+            <div class="form-group">
+                <label for="newAboveAmount">기준인원 이상 금액</label>
+                <input type="number" id="newAboveAmount" value="30000" required>
+            </div>
+            <div class="form-group">
+                <label for="newBelowAmount">기준인원 미만 금액</label>
+                <input type="number" id="newBelowAmount" value="15000" required>
+            </div>
+            <div class="form-actions">
+                <button type="submit">추가</button>
+                <button type="button" onclick="closeAddCenterModal()">취소</button>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+let currentYear = {{ year }};
+let currentMonth = {{ month }};
+let isTaxExcluded = false;
+
+function toggleTaxExclude() {
+    const btn = document.getElementById('taxExcludeBtn');
+    const summaryCards = document.querySelectorAll('.summary-card');
+    
+    isTaxExcluded = !isTaxExcluded;
+    
+    if (isTaxExcluded) {
+        btn.textContent = '세금포함';
+        btn.classList.add('active');
+        
+        // 세금 제외 금액으로 변경 (3.3% 차감)
+        summaryCards.forEach(card => {
+            const originalAmount = parseInt(card.dataset.originalAmount);
+            const taxExcludedAmount = Math.round(originalAmount * 0.967); // 100% - 3.3% = 96.7%
+            const amountElement = card.querySelector('.card-amount');
+            amountElement.textContent = taxExcludedAmount.toLocaleString() + '원';
+        });
+    } else {
+        btn.textContent = '세금제외';
+        btn.classList.remove('active');
+        
+        // 원래 금액으로 복원
+        summaryCards.forEach(card => {
+            const originalAmount = parseInt(card.dataset.originalAmount);
+            const amountElement = card.querySelector('.card-amount');
+            amountElement.textContent = originalAmount.toLocaleString() + '원';
+        });
+    }
+}
+
+function toggleSettings() {
+    const settingsDiv = document.getElementById('pricingSettings');
+    const toggleBtn = document.querySelector('.settings-toggle-btn');
+    
+    if (settingsDiv.style.display === 'none') {
+        settingsDiv.style.display = 'block';
+        toggleBtn.textContent = '숨기기';
+    } else {
+        settingsDiv.style.display = 'none';
+        toggleBtn.textContent = '설정';
+    }
+}
+
+function changeMonth(delta) {
+    let newMonth = currentMonth + delta;
+    let newYear = currentYear;
+    
+    if (newMonth > 12) {
+        newMonth = 1;
+        newYear++;
+    } else if (newMonth < 1) {
+        newMonth = 12;
+        newYear--;
+    }
+    
+    window.location.href = `/settlement?year=${newYear}&month=${newMonth}`;
+}
+
+function updatePricingFromItem(inputElement) {
+    const item = inputElement.closest('.pricing-setting-item');
+    const centerName = item.dataset.center;
+    const basePeopleInput = item.querySelector('.base-people-input');
+    const aboveAmountInput = item.querySelector('.above-amount-input');
+    const belowAmountInput = item.querySelector('.below-amount-input');
+    
+    const basePeople = parseInt(basePeopleInput.value);
+    const aboveAmount = parseInt(aboveAmountInput.value);
+    const belowAmount = parseInt(belowAmountInput.value);
+    
+    console.log('업데이트:', centerName, basePeople, aboveAmount, belowAmount); // 디버깅용
+    
+    fetch('/api/center-pricing', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+            center_name: centerName,
+            base_people: basePeople,
+            above_amount: aboveAmount,
+            below_amount: belowAmount
+        })
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            console.log('금액 설정이 업데이트되었습니다.');
+            // 페이지 새로고침하여 변경사항 반영
+            setTimeout(() => {
+                location.reload();
+            }, 500);
+        } else {
+            console.error('업데이트 실패:', data);
+        }
+    })
+    .catch(error => {
+        console.error('업데이트 에러:', error);
+    });
+}
+
+function updatePricing(centerName, minPeople, amount) {
+    console.log('업데이트:', centerName, minPeople, amount); // 디버깅용
+    
+    fetch('/api/center-pricing', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+            center_name: centerName,
+            min_people: parseInt(minPeople),
+            amount: parseInt(amount)
+        })
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            console.log('금액 설정이 업데이트되었습니다.');
+            // 페이지 새로고침하여 변경사항 반영
+            setTimeout(() => {
+                location.reload();
+            }, 500);
+        } else {
+            console.error('업데이트 실패:', data);
+        }
+    })
+    .catch(error => {
+        console.error('업데이트 에러:', error);
+    });
+}
+
+function showAddCenterForm() {
+    document.getElementById('addCenterForm').reset();
+    document.getElementById('addCenterModal').style.display = 'block';
+}
+
+function closeAddCenterModal() {
+    document.getElementById('addCenterModal').style.display = 'none';
+}
+
+document.getElementById('addCenterForm').addEventListener('submit', function(e) {
+    e.preventDefault();
+    
+    const formData = {
+        center_name: document.getElementById('newCenterName').value,
+        base_people: parseInt(document.getElementById('newBasePeople').value),
+        above_amount: parseInt(document.getElementById('newAboveAmount').value),
+        below_amount: parseInt(document.getElementById('newBelowAmount').value)
+    };
+    
+    fetch('/api/center-pricing', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(formData)
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            closeAddCenterModal();
+            location.reload(); // 페이지 새로고침하여 새 센터 표시
+        }
+    });
+});
+
+// 모달 외부 클릭 시 닫기
+window.onclick = function(event) {
+    const modal = document.getElementById('addTypeModal');
+    if (event.target === modal) {
+        closeAddTypeModal();
+    }
+}
+</script>
+{% endblock %} 
