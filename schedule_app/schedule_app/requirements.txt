@@ -1,0 +1,3 @@
+Flask
+gunicorn
+# 필요시 추가 패키지 (예: pandas, openpyxl 등) 
