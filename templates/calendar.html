@@ -1,0 +1,390 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="calendar-page">
+    <div class="calendar-header">
+        <button class="nav-btn" onclick="changeMonth(-1)">◀</button>
+        <h2>{{ year }}년 {{ month }}월</h2>
+        <button class="nav-btn" onclick="changeMonth(1)">▶</button>
+    </div>
+    
+    <div class="calendar">
+        <div class="calendar-weekdays">
+            <div class="weekday">일</div>
+            <div class="weekday">월</div>
+            <div class="weekday">화</div>
+            <div class="weekday">수</div>
+            <div class="weekday">목</div>
+            <div class="weekday">금</div>
+            <div class="weekday">토</div>
+        </div>
+        
+        <div class="calendar-days">
+            {% for week in calendar %}
+                {% for day in week %}
+                    {% if day == 0 %}
+                        <div class="day empty"></div>
+                    {% else %}
+                        <div class="day" onclick="showDayDetail('{{ year }}-{{ '%02d' % month }}-{{ '%02d' % day }}')">
+                            <span class="day-number">{{ day }}</span>
+                            {% if day|string in schedules %}
+                                <div class="schedule-summary">
+                                    {% for schedule in schedules[day|string]|sort(attribute='time') %}
+                                        <div class="schedule-item-mini center-{{ schedule.center }}">
+                                            <div class="schedule-time-mini">{{ schedule.time or '시간미정' }}</div>
+                                            <div class="schedule-center-mini">{{ schedule.center }}</div>
+                                            <div class="schedule-people-mini">{{ schedule.people_count }}명</div>
+                                        </div>
+                                    {% endfor %}
+                                </div>
+                            {% endif %}
+                        </div>
+                    {% endif %}
+                {% endfor %}
+            {% endfor %}
+        </div>
+    </div>
+    
+    <div class="add-schedule-btn" onclick="showAddScheduleForm()">
+        <span class="add-icon">+</span>
+        <span class="add-text">일정추가</span>
+    </div>
+</div>
+
+<!-- 일정 추가/수정 모달 -->
+<div id="scheduleModal" class="modal">
+    <div class="modal-content">
+        <div class="modal-header">
+            <h3 id="modalTitle">일정 추가</h3>
+            <span class="close" onclick="closeModal()">&times;</span>
+        </div>
+        <form id="scheduleForm">
+            <input type="hidden" id="scheduleId">
+            <div class="form-group">
+                <label for="scheduleDate">날짜</label>
+                <input type="date" id="scheduleDate" required>
+            </div>
+            <div class="form-group">
+                <label for="scheduleTime">시간</label>
+                <select id="scheduleTime">
+                    <option value="">시간 선택</option>
+                    <option value="09:00">09:00</option>
+                    <option value="09:30">09:30</option>
+                    <option value="10:00">10:00</option>
+                    <option value="10:30">10:30</option>
+                    <option value="11:00">11:00</option>
+                    <option value="11:30">11:30</option>
+                    <option value="12:00">12:00</option>
+                    <option value="12:30">12:30</option>
+                    <option value="13:00">13:00</option>
+                    <option value="13:30">13:30</option>
+                    <option value="14:00">14:00</option>
+                    <option value="14:30">14:30</option>
+                    <option value="15:00">15:00</option>
+                    <option value="15:30">15:30</option>
+                    <option value="16:00">16:00</option>
+                    <option value="16:30">16:30</option>
+                    <option value="17:00">17:00</option>
+                    <option value="17:30">17:30</option>
+                    <option value="18:00">18:00</option>
+                    <option value="18:30">18:30</option>
+                    <option value="19:00">19:00</option>
+                    <option value="19:30">19:30</option>
+                    <option value="20:00">20:00</option>
+                    <option value="20:30">20:30</option>
+                    <option value="21:00">21:00</option>
+                    <option value="21:30">21:30</option>
+                </select>
+            </div>
+            <div class="form-group">
+                <label for="scheduleCenter">센터</label>
+                <select id="scheduleCenter" onchange="updateAmount()">
+                    {% if centers %}
+                        {% for center in centers %}
+                            <option value="{{ center }}">{{ center }}</option>
+                        {% endfor %}
+                    {% else %}
+                        <option value="구래">구래</option>
+                        <option value="사우">사우</option>
+                        <option value="마곡">마곡</option>
+                    {% endif %}
+                </select>
+            </div>
+            <div class="form-group">
+                <label for="schedulePeopleCount">인원</label>
+                <input type="number" id="schedulePeopleCount" value="1" min="1" onchange="updateAmount()">
+            </div>
+            <div class="form-group">
+                <label for="scheduleAmount">금액 (자동계산)</label>
+                <input type="number" id="scheduleAmount" readonly>
+            </div>
+            <div class="form-actions">
+                <button type="button" onclick="deleteSchedule()" id="deleteBtn" style="display: none;">삭제</button>
+                <button type="submit">저장</button>
+                <button type="button" onclick="closeModal()">취소</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- 일정 상세 모달 -->
+<div id="dayDetailModal" class="modal">
+    <div class="modal-content">
+        <div class="modal-header">
+            <h3 id="dayDetailTitle">일정 상세</h3>
+            <span class="close" onclick="closeDayDetailModal()">&times;</span>
+        </div>
+        <div id="dayDetailContent">
+            <!-- 일정 목록이 여기에 표시됩니다 -->
+        </div>
+        <div class="modal-footer">
+            <button onclick="showAddScheduleForm()">일정 추가</button>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+let currentYear = {{ year }};
+let currentMonth = {{ month }};
+let selectedDate = '';
+
+function changeMonth(delta) {
+    let newMonth = currentMonth + delta;
+    let newYear = currentYear;
+    
+    if (newMonth > 12) {
+        newMonth = 1;
+        newYear++;
+    } else if (newMonth < 1) {
+        newMonth = 12;
+        newYear--;
+    }
+    
+    window.location.href = `/calendar?year=${newYear}&month=${newMonth}`;
+}
+
+function showDayDetail(date) {
+    selectedDate = date;
+    fetch(`/api/schedule/date/${date}`)
+        .then(response => response.json())
+        .then(schedules => {
+            const content = document.getElementById('dayDetailContent');
+            const title = document.getElementById('dayDetailTitle');
+            
+            title.textContent = `${date} 일정`;
+            
+            if (schedules.length === 0) {
+                content.innerHTML = '<p>등록된 일정이 없습니다.</p>';
+            } else {
+                let html = '<div class="schedule-list">';
+                schedules.forEach(schedule => {
+                                    html += `
+                    <div class="schedule-item" onclick="editSchedule(${schedule.id})">
+                        <div class="schedule-time">${schedule.time || '시간 미정'}</div>
+                        <div class="schedule-info">
+                            <div class="schedule-title">${schedule.center}</div>
+                            <div class="schedule-details">${schedule.people_count}명 - ${schedule.amount.toLocaleString()}원</div>
+                            <div class="schedule-date" style="font-size: 12px; color: #999;">${schedule.date}</div>
+                        </div>
+                    </div>
+                `;
+                });
+                html += '</div>';
+                content.innerHTML = html;
+            }
+            
+            document.getElementById('dayDetailModal').style.display = 'block';
+        });
+}
+
+function closeDayDetailModal() {
+    document.getElementById('dayDetailModal').style.display = 'none';
+}
+
+function showAddScheduleForm() {
+    document.getElementById('modalTitle').textContent = '일정 추가';
+    document.getElementById('scheduleForm').reset();
+    document.getElementById('scheduleId').value = '';
+    document.getElementById('scheduleDate').value = selectedDate || new Date().toISOString().split('T')[0];
+    document.getElementById('deleteBtn').style.display = 'none';
+    document.getElementById('scheduleModal').style.display = 'block';
+    
+    // 센터 선택 옵션 확인
+    const centerSelect = document.getElementById('scheduleCenter');
+    console.log('센터 선택 옵션 개수:', centerSelect.options.length);
+    console.log('사용 가능한 센터들:', Array.from(centerSelect.options).map(opt => opt.value));
+    
+    updateAmount();
+    closeDayDetailModal();
+}
+
+function updateAmount() {
+    const peopleCount = parseInt(document.getElementById('schedulePeopleCount').value) || 1;
+    const center = document.getElementById('scheduleCenter').value;
+    
+    // 센터별 기준인원에 따른 금액 계산
+    fetch('/api/calculate-amount', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+            center: center,
+            people_count: peopleCount
+        })
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            document.getElementById('scheduleAmount').value = data.amount;
+        } else {
+            // 기본값 사용
+            const amount = peopleCount >= 2 ? 30000 : 15000;
+            document.getElementById('scheduleAmount').value = amount;
+        }
+    })
+    .catch(error => {
+        console.error('금액 계산 에러:', error);
+        // 기본값 사용
+        const amount = peopleCount >= 2 ? 30000 : 15000;
+        document.getElementById('scheduleAmount').value = amount;
+    });
+}
+
+// 동적 센터 색상 CSS 추가
+function addDynamicCenterColors() {
+    const centers = Array.from(document.getElementById('scheduleCenter').options).map(opt => opt.value);
+    const existingColors = ['#007AFF', '#34C759', '#FF9500', '#AF52DE', '#FF3B30', '#5856D6', '#FF2D92', '#5AC8FA'];
+    
+    centers.forEach((center, index) => {
+        const color = existingColors[index % existingColors.length];
+        const style = document.createElement('style');
+        style.textContent = `
+            .schedule-item-mini.center-${center} {
+                background-color: ${color} !important;
+            }
+        `;
+        document.head.appendChild(style);
+    });
+}
+
+// 페이지 로드 시 동적 색상 적용
+document.addEventListener('DOMContentLoaded', function() {
+    addDynamicCenterColors();
+});
+
+function editSchedule(scheduleId) {
+    // 일정 수정 로직 구현
+    document.getElementById('modalTitle').textContent = '일정 수정';
+    document.getElementById('scheduleId').value = scheduleId;
+    document.getElementById('deleteBtn').style.display = 'inline-block';
+    
+    // 일정 데이터 가져오기 (ID로 직접 조회)
+    fetch(`/api/schedule/detail/${scheduleId}`)
+        .then(response => response.json())
+        .then(schedule => {
+            console.log('가져온 일정:', schedule); // 디버깅용
+            if (schedule && !schedule.error) {
+                // 날짜 형식 변환 (YYYY-MM-DD 형식으로)
+                const dateObj = new Date(schedule.date);
+                const formattedDate = dateObj.toISOString().split('T')[0];
+                console.log('변환된 날짜:', formattedDate); // 디버깅용
+                console.log('원본 시간:', schedule.time); // 디버깅용
+                
+                document.getElementById('scheduleDate').value = formattedDate;
+                document.getElementById('scheduleTime').value = schedule.time || '';
+                document.getElementById('scheduleCenter').value = schedule.center || '구래';
+                document.getElementById('schedulePeopleCount').value = schedule.people_count || 1;
+                document.getElementById('scheduleAmount').value = schedule.amount;
+                updateAmount();
+            } else {
+                console.error('일정을 찾을 수 없습니다:', schedule);
+                alert('일정을 찾을 수 없습니다.');
+            }
+        })
+        .catch(error => {
+            console.error('일정 데이터 가져오기 에러:', error);
+            alert('일정 데이터를 가져오는 중 오류가 발생했습니다.');
+        });
+    
+    document.getElementById('scheduleModal').style.display = 'block';
+    closeDayDetailModal();
+}
+
+function closeModal() {
+    document.getElementById('scheduleModal').style.display = 'none';
+}
+
+function deleteSchedule() {
+    const scheduleId = document.getElementById('scheduleId').value;
+    if (confirm('정말 삭제하시겠습니까?')) {
+        fetch(`/api/schedule/delete/${scheduleId}`, {
+            method: 'DELETE'
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                closeModal();
+                location.reload();
+            }
+        });
+    }
+}
+
+document.getElementById('scheduleForm').addEventListener('submit', function(e) {
+    e.preventDefault();
+    
+    const scheduleId = document.getElementById('scheduleId').value;
+    const formData = {
+        date: document.getElementById('scheduleDate').value,
+        time: document.getElementById('scheduleTime').value,
+        center: document.getElementById('scheduleCenter').value,
+        people_count: parseInt(document.getElementById('schedulePeopleCount').value)
+    };
+    
+    console.log('폼 데이터:', formData); // 디버깅용
+    
+    const url = scheduleId ? `/api/schedule/update/${scheduleId}` : '/api/schedule';
+    const method = scheduleId ? 'PUT' : 'POST';
+    
+    fetch(url, {
+        method: method,
+        headers: {
+            'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(formData)
+    })
+    .then(response => {
+        console.log('응답 상태:', response.status); // 디버깅용
+        return response.json();
+    })
+    .then(data => {
+        console.log('응답 데이터:', data); // 디버깅용
+        if (data.success) {
+            closeModal();
+            location.reload();
+        } else {
+            alert('저장에 실패했습니다.');
+        }
+    })
+    .catch(error => {
+        console.error('에러:', error); // 디버깅용
+        alert('저장 중 오류가 발생했습니다.');
+    });
+});
+
+// 모달 외부 클릭 시 닫기
+window.onclick = function(event) {
+    const modal = document.getElementById('scheduleModal');
+    const dayModal = document.getElementById('dayDetailModal');
+    if (event.target === modal) {
+        closeModal();
+    }
+    if (event.target === dayModal) {
+        closeDayDetailModal();
+    }
+}
+</script>
+{% endblock %} 
