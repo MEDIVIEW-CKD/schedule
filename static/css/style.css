@@ -694,4 +694,12 @@ body, .container {
     .schedule-summary {
         max-height: 36px;
     }
+}
+
+@media (max-width: 900px) {
+    .day {
+        min-height: 100px !important;
+        padding: 10px !important;
+        background: #ffeedd !important; /* 임시 확인용 */
+    }
 } 
