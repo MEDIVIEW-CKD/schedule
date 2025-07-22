@@ -27,9 +27,9 @@
                     {% else %}
                         <div class="day" onclick="showDayDetail('{{ year }}-{{ '%02d' % month }}-{{ '%02d' % day }}')">
                             <span class="day-number">{{ day }}</span>
-                            {% if day|string in schedules %}
+                            {% if day in schedules %}
                                 <div class="schedule-summary">
-                                    {% for schedule in schedules[day|string]|sort(attribute='time') %}
+                                    {% for schedule in schedules[day]|sort(attribute='time') %}
                                         <div class="schedule-item-mini center-{{ schedule.center }}">
                                             <div class="schedule-time-mini">{{ schedule.time or '시간미정' }}</div>
                                             <div class="schedule-center-mini">{{ schedule.center }}</div>
