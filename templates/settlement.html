@@ -367,5 +367,49 @@ window.onclick = function(event) {
 body {
     padding-bottom: 70px; /* 하단바 가리지 않게 */
 }
+/* 모달 반응형 스타일 */
+.modal-content {
+    max-width: 400px;
+    width: 90vw;
+    margin: 0 auto;
+    padding: 24px 20px;
+    font-size: 16px;
+    border-radius: 12px;
+    box-sizing: border-box;
+    background: #fff;
+}
+.modal-header h3 {
+    font-size: 20px;
+}
+.modal-content input,
+.modal-content select,
+.modal-content button {
+    font-size: 16px;
+    padding: 10px 8px;
+    border-radius: 6px;
+    margin-bottom: 8px;
+}
+label {
+    font-size: 15px;
+}
+@media (max-width: 600px) {
+    .modal-content {
+        max-width: 98vw;
+        width: 98vw;
+        padding: 16px 4px;
+        font-size: 18px;
+    }
+    .modal-header h3,
+    .modal-footer button,
+    label {
+        font-size: 18px;
+    }
+    .modal-content input,
+    .modal-content select,
+    .modal-content button {
+        font-size: 18px;
+        padding: 14px 10px;
+    }
+}
 </style> 
 {% endblock %} 
