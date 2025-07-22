@@ -121,7 +121,8 @@ def calendar_view():
     
     conn.close()
     
-    # 달력 생성
+    # 달력의 첫 요일을 일요일로 설정
+    calendar.setfirstweekday(calendar.SUNDAY)
     cal = calendar.monthcalendar(year, month)
     month_name = calendar.month_name[month]
     
