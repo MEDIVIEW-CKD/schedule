@@ -91,7 +91,7 @@ def calendar_view():
     
     schedules = {}
     for row in cursor.fetchall():
-        day = row[0].split('-')[2]
+        day = int(row[0].split('-')[2])  # 문자열이 아닌 int로 변환
         if day not in schedules:
             schedules[day] = []
         schedules[day].append({
