@@ -210,36 +210,8 @@ function showAddScheduleForm() {
 }
 
 function updateAmount() {
-    const peopleCount = parseInt(document.getElementById('schedulePeopleCount').value) || 1;
-    const center = document.getElementById('scheduleCenter').value;
-    
-    // 센터별 기준인원에 따른 금액 계산
-    fetch('/api/calculate-amount', {
-        method: 'POST',
-        headers: {
-            'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-            center: center,
-            people_count: peopleCount
-        })
-    })
-    .then(response => response.json())
-    .then(data => {
-        if (data.success) {
-            document.getElementById('scheduleAmount').value = data.amount;
-        } else {
-            // 기본값 사용
-            const amount = peopleCount >= 2 ? 30000 : 15000;
-            document.getElementById('scheduleAmount').value = amount;
-        }
-    })
-    .catch(error => {
-        console.error('금액 계산 에러:', error);
-        // 기본값 사용
-        const amount = peopleCount >= 2 ? 30000 : 15000;
-        document.getElementById('scheduleAmount').value = amount;
-    });
+    // 금액 계산 관련 코드 완전 제거
+    // (이제 아무 동작도 하지 않음)
 }
 
 // 동적 센터 색상 CSS 추가
@@ -274,37 +246,28 @@ function editSchedule(scheduleId) {
     document.getElementById('modalTitle').textContent = '일정 수정';
     document.getElementById('scheduleId').value = scheduleId;
     document.getElementById('deleteBtn').style.display = 'inline-block';
-    
     // 일정 데이터 가져오기 (ID로 직접 조회)
     fetch(`/api/schedule/detail/${scheduleId}`)
         .then(response => response.json())
         .then(schedule => {
-            console.log('가져온 일정:', schedule); // 디버깅용
             if (schedule && !schedule.error) {
-                // 날짜 형식 변환 (YYYY-MM-DD 형식으로)
                 const dateObj = new Date(schedule.date);
                 const formattedDate = dateObj.toISOString().split('T')[0];
-                console.log('변환된 날짜:', formattedDate); // 디버깅용
-                console.log('원본 시간:', schedule.time); // 디버깅용
-                
                 document.getElementById('scheduleDate').value = formattedDate;
                 document.getElementById('scheduleTime').value = schedule.time || '';
                 document.getElementById('scheduleCenter').value = schedule.center || '구래';
                 document.getElementById('schedulePeopleCount').value = schedule.people_count || 1;
-                document.getElementById('scheduleAmount').value = schedule.amount;
-                updateAmount();
+                // 모달 열기
+                document.getElementById('scheduleModal').style.display = 'block';
+                closeDayDetailModal();
             } else {
-                console.error('일정을 찾을 수 없습니다:', schedule);
-                alert('일정을 찾을 수 없습니다.');
+                alert('일정 데이터를 불러올 수 없습니다.');
             }
         })
         .catch(error => {
             console.error('일정 데이터 가져오기 에러:', error);
-            alert('일정 데이터를 가져오는 중 오류가 발생했습니다.');
+            alert('오류가 발생했습니다.');
         });
-    
-    document.getElementById('scheduleModal').style.display = 'block';
-    closeDayDetailModal();
 }
 
 function closeModal() {
@@ -332,30 +295,51 @@ const form = document.getElementById('scheduleForm');
 if (form) {
     form.onsubmit = async function(e) {
         e.preventDefault();
+        const scheduleId = document.getElementById('scheduleId').value;
         const dates = document.getElementById('scheduleDate').value.split(',').map(s => s.trim()).filter(Boolean);
-        if (!dates.length) {
-            alert('날짜를 하나 이상 선택하세요.');
-            return;
-        }
         const time = document.getElementById('scheduleTime').value;
         const center = document.getElementById('scheduleCenter').value;
         const people_count = parseInt(document.getElementById('schedulePeopleCount').value) || 1;
-        const amount = parseInt(document.getElementById('scheduleAmount').value) || 0;
-        try {
-            const res = await fetch('/api/schedule/bulk', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ dates, time, center, people_count, amount })
-            });
-            const data = await res.json();
-            if (data.success) {
-                alert('일정이 등록되었습니다.');
-                window.location.reload();
-            } else {
-                alert(data.error || '일정 등록 실패');
+
+        if (scheduleId) {
+            // 일정 수정(UPDATE)
+            try {
+                const res = await fetch(`/api/schedule/update/${scheduleId}`, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        date: dates[0], // 수정은 한 날짜만
+                        time, center, people_count
+                    })
+                });
+                const data = await res.json();
+                if (data.success) {
+                    alert('일정이 수정되었습니다.');
+                    window.location.reload();
+                } else {
+                    alert(data.error || '일정 수정 실패');
+                }
+            } catch (err) {
+                alert('서버 오류: ' + err.message);
             }
-        } catch (err) {
-            alert('서버 오류: ' + err.message);
+        } else {
+            // 일정 추가(INSERT)
+            try {
+                const res = await fetch('/api/schedule/bulk', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ dates, time, center, people_count })
+                });
+                const data = await res.json();
+                if (data.success) {
+                    alert('일정이 등록되었습니다.');
+                    window.location.reload();
+                } else {
+                    alert(data.error || '일정 등록 실패');
+                }
+            } catch (err) {
+                alert('서버 오류: ' + err.message);
+            }
         }
     };
 }
