@@ -43,14 +43,14 @@
                 <button class="settings-toggle-btn" onclick="toggleSettings()">설정</button>
             </div>
             <div class="pricing-settings" id="pricingSettings" style="display: none;">
-                {% for center_name, base_people, above_amount, below_amount in center_pricing %}
-                    <div class="pricing-setting-item" data-center="{{ center_name }}">
+                {% for center in center_pricing %}
+                    <div class="pricing-setting-item" data-center="{{ center.center_name }}">
                         <div class="pricing-info">
-                            <div class="center-name">{{ center_name }}</div>
+                            <div class="center-name">{{ center.center_name }}</div>
                             <div class="base-people-setting">
                                 <label>기준인원:</label>
                                 <input type="number" 
-                                       value="{{ base_people }}" 
+                                       value="{{ center.base_people }}" 
                                        min="1"
                                        class="base-people-input"
                                        onchange="updatePricingFromItem(this)">
@@ -61,7 +61,7 @@
                             <div class="amount-setting">
                                 <label>기준인원 이상:</label>
                                 <input type="number" 
-                                       value="{{ above_amount }}" 
+                                       value="{{ center.above_amount }}" 
                                        class="above-amount-input"
                                        onchange="updatePricingFromItem(this)"
                                        placeholder="금액">
@@ -70,7 +70,7 @@
                             <div class="amount-setting">
                                 <label>기준인원 미만:</label>
                                 <input type="number" 
-                                       value="{{ below_amount }}" 
+                                       value="{{ center.below_amount }}" 
                                        class="below-amount-input"
                                        onchange="updatePricingFromItem(this)"
                                        placeholder="금액">
