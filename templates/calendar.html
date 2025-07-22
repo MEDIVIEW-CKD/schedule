@@ -120,10 +120,7 @@
                 <label for="schedulePeopleCount">인원</label>
                 <input type="number" id="schedulePeopleCount" value="1" min="1" onchange="updateAmount()">
             </div>
-            <div class="form-group">
-                <label for="scheduleAmount">금액 (자동계산)</label>
-                <input type="number" id="scheduleAmount" readonly>
-            </div>
+            <!-- 금액(자동계산) 영역 완전 제거 -->
             <div class="form-actions">
                 <button type="button" onclick="deleteSchedule()" id="deleteBtn" style="display: none;">삭제</button>
                 <button type="submit">저장</button>
