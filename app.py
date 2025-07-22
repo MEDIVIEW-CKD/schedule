@@ -129,6 +129,8 @@ def calendar_view():
         db.session.commit()
         centers = [c.center_name for c in CenterPricing.query.order_by(CenterPricing.center_name).all()]
 
+    # 달력의 첫 요일을 일요일로 설정
+    calendar.setfirstweekday(calendar.SUNDAY)
     cal = calendar.monthcalendar(year, month)
     month_name = calendar.month_name[month]
     return render_template('calendar.html', 
