@@ -346,6 +346,32 @@ def calculate_amount_api():
     
     return jsonify({'success': True, 'amount': amount})
 
+# 일정 일괄 등록 API
+@app.route('/api/schedule/bulk', methods=['POST'])
+def add_schedule_bulk():
+    data = request.json
+    dates = data.get('dates', [])
+    time = data.get('time', '')
+    center = data.get('center', '구래')
+    people_count = data.get('people_count', 1)
+    amount = data.get('amount', 15000)
+    try:
+        conn = sqlite3.connect('schedule.db')
+        cursor = conn.cursor()
+        for date_str in dates:
+            # 금액 재계산 (혹시 프론트에서 잘못된 값이 올 수 있으므로)
+            calc_amount = calculate_amount(center, people_count)
+            cursor.execute('''
+                INSERT INTO schedules (date, time, center, people_count, amount)
+                VALUES (?, ?, ?, ?, ?)
+            ''', (date_str, time, center, people_count, calc_amount))
+        conn.commit()
+        conn.close()
+        return jsonify({'success': True})
+    except Exception as e:
+        print(f"일괄 등록 에러: {e}")
+        return jsonify({'success': False, 'error': str(e)}), 500
+
 if __name__ == '__main__':
     init_db()
     port = int(os.environ.get('PORT', 10000))

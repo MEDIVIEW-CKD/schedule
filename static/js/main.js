@@ -123,3 +123,36 @@ style.textContent = `
     }
 `;
 document.head.appendChild(style); 
+
+// 일정 추가/수정 폼 제출 이벤트 (여러 날짜 지원)
+document.addEventListener('DOMContentLoaded', function() {
+    const form = document.getElementById('scheduleForm');
+    if (form) {
+        form.onsubmit = async function(e) {
+            e.preventDefault();
+            const dates = selectedDates;
+            if (!dates.length) {
+                showError('날짜를 하나 이상 선택하세요.');
+                return;
+            }
+            const time = document.getElementById('scheduleTime').value;
+            const center = document.getElementById('scheduleCenter').value;
+            const people_count = parseInt(document.getElementById('schedulePeopleCount').value) || 1;
+            const amount = parseInt(document.getElementById('scheduleAmount').value) || 0;
+            try {
+                const res = await apiCall('/api/schedule/bulk', {
+                    method: 'POST',
+                    body: JSON.stringify({ dates, time, center, people_count, amount })
+                });
+                if (res.success) {
+                    showSuccess('일정이 등록되었습니다.');
+                    window.location.reload();
+                } else {
+                    showError(res.error || '일정 등록 실패');
+                }
+            } catch (err) {
+                showError('서버 오류: ' + err.message);
+            }
+        };
+    }
+}); 

@@ -1,5 +1,11 @@
 {% extends "base.html" %}
 
+{% block head %}
+{{ super() }}
+<!-- flatpickr CSS -->
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr@4.6.13/dist/flatpickr.min.css">
+{% endblock %}
+
 {% block content %}
 <div class="calendar-page">
     <div class="calendar-header">
@@ -25,7 +31,7 @@
                     {% if day == 0 %}
                         <div class="day empty"></div>
                     {% else %}
-                        <div class="day" onclick="showDayDetail('{{ year }}-{{ '%02d' % month }}-{{ '%02d' % day }}')">
+                        <div class="day" data-date="{{ year }}-{{ '%02d' % month }}-{{ '%02d' % day }}">
                             <span class="day-number">{{ day }}</span>
                             {% if day in schedules %}
                                 <div class="schedule-summary">
@@ -61,8 +67,8 @@
         <form id="scheduleForm">
             <input type="hidden" id="scheduleId">
             <div class="form-group">
-                <label for="scheduleDate">날짜</label>
-                <input type="date" id="scheduleDate" required>
+                <label for="scheduleDate">날짜(여러 개 선택 가능)</label>
+                <input type="text" id="scheduleDate" required readonly>
             </div>
             <div class="form-group">
                 <label for="scheduleTime">시간</label>
@@ -128,7 +134,7 @@
 </div>
 
 <!-- 일정 상세 모달 -->
-<div id="dayDetailModal" class="modal">
+<div id="dayDetailModal" class="modal" style="display:none;">
     <div class="modal-content">
         <div class="modal-header">
             <h3 id="dayDetailTitle">일정 상세</h3>
@@ -145,10 +151,17 @@
 {% endblock %}
 
 {% block scripts %}
+{{ super() }}
+<!-- flatpickr JS -->
+<script src="https://cdn.jsdelivr.net/npm/flatpickr@4.6.13"></script>
+<!-- flatpickr 한국어 locale -->
+<script src="https://cdn.jsdelivr.net/npm/flatpickr@4.6.13/dist/l10n/ko.js"></script>
 <script>
 let currentYear = {{ year }};
 let currentMonth = {{ month }};
 let selectedDate = '';
+// 선택된 날짜 배열
+window.selectedDates = window.selectedDates || [];
 
 function changeMonth(delta) {
     let newMonth = currentMonth + delta;
@@ -165,59 +178,38 @@ function changeMonth(delta) {
     window.location.href = `/calendar?year=${newYear}&month=${newMonth}`;
 }
 
-function showDayDetail(date) {
-    selectedDate = date;
-    fetch(`/api/schedule/date/${date}`)
-        .then(response => response.json())
-        .then(schedules => {
-            const content = document.getElementById('dayDetailContent');
-            const title = document.getElementById('dayDetailTitle');
-            
-            title.textContent = `${date} 일정`;
-            
-            if (schedules.length === 0) {
-                content.innerHTML = '<p>등록된 일정이 없습니다.</p>';
-            } else {
-                let html = '<div class="schedule-list">';
-                schedules.forEach(schedule => {
-                                    html += `
-                    <div class="schedule-item" onclick="editSchedule(${schedule.id})">
-                        <div class="schedule-time">${schedule.time || '시간 미정'}</div>
-                        <div class="schedule-info">
-                            <div class="schedule-title">${schedule.center}</div>
-                            <div class="schedule-details">${schedule.people_count}명 - ${schedule.amount.toLocaleString()}원</div>
-                            <div class="schedule-date" style="font-size: 12px; color: #999;">${schedule.date}</div>
-                        </div>
-                    </div>
-                `;
-                });
-                html += '</div>';
-                content.innerHTML = html;
-            }
-            
-            document.getElementById('dayDetailModal').style.display = 'block';
-        });
+// 날짜 셀 클릭 시 선택/해제
+function toggleDateSelection(dateStr, dayElem) {
+    const idx = selectedDates.indexOf(dateStr);
+    if (idx === -1) {
+        selectedDates.push(dateStr);
+        dayElem.classList.add('selected');
+    } else {
+        selectedDates.splice(idx, 1);
+        dayElem.classList.remove('selected');
+    }
 }
 
-function closeDayDetailModal() {
-    document.getElementById('dayDetailModal').style.display = 'none';
-}
+document.addEventListener('DOMContentLoaded', function() {
+    window.scheduleDatePicker = flatpickr('#scheduleDate', {
+        mode: 'multiple',
+        dateFormat: 'Y-m-d',
+        locale: 'ko'
+    });
+});
 
 function showAddScheduleForm() {
     document.getElementById('modalTitle').textContent = '일정 추가';
     document.getElementById('scheduleForm').reset();
     document.getElementById('scheduleId').value = '';
-    document.getElementById('scheduleDate').value = selectedDate || new Date().toISOString().split('T')[0];
     document.getElementById('deleteBtn').style.display = 'none';
     document.getElementById('scheduleModal').style.display = 'block';
-    
-    // 센터 선택 옵션 확인
-    const centerSelect = document.getElementById('scheduleCenter');
-    console.log('센터 선택 옵션 개수:', centerSelect.options.length);
-    console.log('사용 가능한 센터들:', Array.from(centerSelect.options).map(opt => opt.value));
-    
-    updateAmount();
-    closeDayDetailModal();
+    // 상세 모달에서 일정추가 버튼 클릭 시 해당 날짜를 미리 선택
+    if (window.selectedDate && window.scheduleDatePicker) {
+        window.scheduleDatePicker.setDate(window.selectedDate, true);
+    }
+    updateAmount && updateAmount();
+    closeDayDetailModal && closeDayDetailModal();
 }
 
 function updateAmount() {
@@ -273,6 +265,11 @@ function addDynamicCenterColors() {
 // 페이지 로드 시 동적 색상 적용
 document.addEventListener('DOMContentLoaded', function() {
     addDynamicCenterColors();
+    // flatpickr('#scheduleDate', { // This line is now handled by the new_code
+    //     mode: 'multiple',
+    //     dateFormat: 'Y-m-d',
+    //     locale: 'ko', // 반드시 문자열 'ko'로!
+    // });
 });
 
 function editSchedule(scheduleId) {
@@ -333,47 +330,38 @@ function deleteSchedule() {
     }
 }
 
-document.getElementById('scheduleForm').addEventListener('submit', function(e) {
-    e.preventDefault();
-    
-    const scheduleId = document.getElementById('scheduleId').value;
-    const formData = {
-        date: document.getElementById('scheduleDate').value,
-        time: document.getElementById('scheduleTime').value,
-        center: document.getElementById('scheduleCenter').value,
-        people_count: parseInt(document.getElementById('schedulePeopleCount').value)
-    };
-    
-    console.log('폼 데이터:', formData); // 디버깅용
-    
-    const url = scheduleId ? `/api/schedule/update/${scheduleId}` : '/api/schedule';
-    const method = scheduleId ? 'PUT' : 'POST';
-    
-    fetch(url, {
-        method: method,
-        headers: {
-            'Content-Type': 'application/json'
-        },
-        body: JSON.stringify(formData)
-    })
-    .then(response => {
-        console.log('응답 상태:', response.status); // 디버깅용
-        return response.json();
-    })
-    .then(data => {
-        console.log('응답 데이터:', data); // 디버깅용
-        if (data.success) {
-            closeModal();
-            location.reload();
-        } else {
-            alert('저장에 실패했습니다.');
+// 일정추가 폼 제출 시 선택된 날짜들을 배열로 추출
+const form = document.getElementById('scheduleForm');
+if (form) {
+    form.onsubmit = async function(e) {
+        e.preventDefault();
+        const dates = document.getElementById('scheduleDate').value.split(',').map(s => s.trim()).filter(Boolean);
+        if (!dates.length) {
+            alert('날짜를 하나 이상 선택하세요.');
+            return;
         }
-    })
-    .catch(error => {
-        console.error('에러:', error); // 디버깅용
-        alert('저장 중 오류가 발생했습니다.');
-    });
-});
+        const time = document.getElementById('scheduleTime').value;
+        const center = document.getElementById('scheduleCenter').value;
+        const people_count = parseInt(document.getElementById('schedulePeopleCount').value) || 1;
+        const amount = parseInt(document.getElementById('scheduleAmount').value) || 0;
+        try {
+            const res = await fetch('/api/schedule/bulk', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ dates, time, center, people_count, amount })
+            });
+            const data = await res.json();
+            if (data.success) {
+                alert('일정이 등록되었습니다.');
+                window.location.reload();
+            } else {
+                alert(data.error || '일정 등록 실패');
+            }
+        } catch (err) {
+            alert('서버 오류: ' + err.message);
+        }
+    };
+}
 
 // 모달 외부 클릭 시 닫기
 window.onclick = function(event) {
@@ -386,5 +374,101 @@ window.onclick = function(event) {
         closeDayDetailModal();
     }
 }
+
+document.addEventListener('DOMContentLoaded', function() {
+    document.querySelector('.calendar-days').addEventListener('click', function(e) {
+        const dayElem = e.target.closest('.day[data-date]');
+        if (dayElem) {
+            const date = dayElem.getAttribute('data-date');
+            openDayDetailModal(date);
+        }
+    });
+});
+
+function openDayDetailModal(date) {
+    window.selectedDate = date;
+    fetch(`/api/schedule/date/${date}`)
+        .then(response => response.json())
+        .then(schedules => {
+            const content = document.getElementById('dayDetailContent');
+            const title = document.getElementById('dayDetailTitle');
+            title.textContent = `${date} 일정`;
+            if (schedules.length === 0) {
+                content.innerHTML = '<p>등록된 일정이 없습니다.</p>';
+            } else {
+                let html = '<div class="schedule-list">';
+                schedules.forEach(schedule => {
+                    html += `
+                        <div class="schedule-item" onclick="editSchedule(${schedule.id})">
+                            <div class="schedule-time">${schedule.time || '시간 미정'}</div>
+                            <div class="schedule-info">
+                                <div class="schedule-title">${schedule.center}</div>
+                                <div class="schedule-details">${schedule.people_count}명 - ${schedule.amount.toLocaleString()}원</div>
+                                <div class="schedule-date" style="font-size: 12px; color: #999;">${schedule.date}</div>
+                            </div>
+                        </div>
+                    `;
+                });
+                html += '</div>';
+                content.innerHTML = html;
+            }
+            document.getElementById('dayDetailModal').style.display = 'block';
+        });
+}
+function closeDayDetailModal() {
+    document.getElementById('dayDetailModal').style.display = 'none';
+}
 </script>
+
+<!-- 하단 탭 메뉴 -->
+<div class="bottom-tab-menu">
+    <a href="/calendar" class="tab-btn{% if request.path == '/calendar' %} active{% endif %}">
+        <span class="tab-icon nav-icon" style="vertical-align:middle;display:inline-block;width:24px;height:24px;">📅</span>
+        달력
+    </a>
+    <a href="/settlement" class="tab-btn{% if request.path == '/settlement' %} active{% endif %}">
+        <span class="tab-icon nav-icon" style="vertical-align:middle;display:inline-block;width:24px;height:24px;">💰</span>
+        정산관리
+    </a>
+</div>
+
+<style>
+.bottom-tab-menu {
+    position: fixed;
+    left: 0; right: 0; bottom: 0;
+    height: 56px;
+    background: #fff;
+    border-top: 1px solid #eee;
+    display: flex;
+    z-index: 1000;
+}
+.tab-btn {
+    flex: 1;
+    text-align: center;
+    line-height: 56px;
+    font-size: 16px;
+    color: #888;
+    text-decoration: none;
+    transition: background 0.2s, color 0.2s;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 2px;
+}
+.tab-btn.active {
+    color: #007AFF;
+    font-weight: bold;
+    background: #f0f6ff;
+}
+.tab-btn.active .tab-icon svg rect,
+.tab-btn.active .tab-icon svg path,
+.tab-btn.active .tab-icon svg circle {
+    stroke: #007AFF !important;
+    fill: #007AFF !important;
+}
+.tab-icon {
+    margin-bottom: 2px;
+}
+</style>
 {% endblock %} 
