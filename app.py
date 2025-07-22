@@ -9,7 +9,7 @@ from sqlalchemy import text
 
 app = Flask(__name__, static_folder='static', static_url_path='/static')
 # PostgreSQL 연결 설정
-app.config['SQLALCHEMY_DATABASE_URI'] = 'postgresql://schedule_2sni_user:2kyriEvve7VoyYJdDAjhs7MgMv5xYkrm@dpg-d1vifgc9c44c73dt0s4g-a.oregon-postgres.render.com:5432/schedule_2sni'
+app.config['SQLALCHEMY_DATABASE_URI'] = 'postgresql://neondb_owner:npg_MXdTpbtFY91K@ep-summer-pond-afcn2u1o-pooler.c-2.us-west-2.aws.neon.tech/neondb?sslmode=require&channel_binding=require'
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 db = SQLAlchemy(app)
 
