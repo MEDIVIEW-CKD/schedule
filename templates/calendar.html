@@ -423,12 +423,12 @@ function closeDayDetailModal() {
 <!-- 하단 탭 메뉴 -->
 <div class="bottom-tab-menu">
     <a href="/calendar" class="tab-btn{% if request.path == '/calendar' %} active{% endif %}">
-        <span class="tab-icon nav-icon" style="vertical-align:middle;display:inline-block;width:24px;height:24px;">📅</span>
-        달력
+        <span class="tab-icon nav-icon">📅</span>
+        <span class="tab-label">달력</span>
     </a>
     <a href="/settlement" class="tab-btn{% if request.path == '/settlement' %} active{% endif %}">
-        <span class="tab-icon nav-icon" style="vertical-align:middle;display:inline-block;width:24px;height:24px;">💰</span>
-        정산관리
+        <span class="tab-icon nav-icon">💰</span>
+        <span class="tab-label">정산관리</span>
     </a>
 </div>
 
@@ -436,17 +436,18 @@ function closeDayDetailModal() {
 .bottom-tab-menu {
     position: fixed;
     left: 0; right: 0; bottom: 0;
-    height: 56px;
+    height: 64px;
     background: #fff;
     border-top: 1px solid #eee;
     display: flex;
     z-index: 1000;
+    box-shadow: 0 -2px 8px rgba(0,0,0,0.04);
 }
 .tab-btn {
     flex: 1;
     text-align: center;
-    line-height: 56px;
-    font-size: 16px;
+    padding: 6px 0 2px 0;
+    font-size: 15px;
     color: #888;
     text-decoration: none;
     transition: background 0.2s, color 0.2s;
@@ -455,20 +456,36 @@ function closeDayDetailModal() {
     align-items: center;
     justify-content: center;
     gap: 2px;
+    user-select: none;
+    -webkit-tap-highlight-color: transparent;
 }
 .tab-btn.active {
     color: #007AFF;
     font-weight: bold;
     background: #f0f6ff;
 }
-.tab-btn.active .tab-icon svg rect,
-.tab-btn.active .tab-icon svg path,
-.tab-btn.active .tab-icon svg circle {
-    stroke: #007AFF !important;
-    fill: #007AFF !important;
+.tab-label {
+    font-size: 13px;
+    margin-top: 2px;
 }
 .tab-icon {
-    margin-bottom: 2px;
+    margin-bottom: 0;
+    font-size: 24px;
+    line-height: 1;
+}
+@media (max-width: 600px) {
+    .bottom-tab-menu {
+        height: 56px;
+    }
+    .tab-label {
+        font-size: 12px;
+    }
+    .tab-icon {
+        font-size: 22px;
+    }
+}
+body {
+    padding-bottom: 70px; /* 하단바 가리지 않게 */
 }
 </style>
 {% endblock %} 
