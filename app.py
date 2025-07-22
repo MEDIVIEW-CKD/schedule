@@ -4,8 +4,33 @@ from datetime import datetime, date
 import calendar
 import json
 import os
+from flask_sqlalchemy import SQLAlchemy
+from sqlalchemy import text
 
 app = Flask(__name__, static_folder='static', static_url_path='/static')
+# PostgreSQL 연결 설정
+app.config['SQLALCHEMY_DATABASE_URI'] = 'postgresql://schedule_2sni_user:2kyriEvve7VoyYJdDAjhs7MgMv5xYkrm@dpg-d1vifgc9c44c73dt0s4g-a.oregon-postgres.render.com:5432/schedule_2sni'
+app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
+db = SQLAlchemy(app)
+
+class Schedule(db.Model):
+    __tablename__ = 'schedules'
+    id = db.Column(db.Integer, primary_key=True)
+    date = db.Column(db.String, nullable=False)
+    time = db.Column(db.String)
+    center = db.Column(db.String, default='구래')
+    people_count = db.Column(db.Integer, default=1)
+    amount = db.Column(db.Integer, default=15000)
+    created_at = db.Column(db.DateTime, server_default=db.func.now())
+
+class CenterPricing(db.Model):
+    __tablename__ = 'center_pricing'
+    id = db.Column(db.Integer, primary_key=True)
+    center_name = db.Column(db.String, unique=True, nullable=False)
+    base_people = db.Column(db.Integer, default=2)
+    above_amount = db.Column(db.Integer, default=30000)
+    below_amount = db.Column(db.Integer, default=15000)
+    created_at = db.Column(db.DateTime, server_default=db.func.now())
 
 # 센터별 기준인원에 따른 금액 계산 함수
 def calculate_amount(center, people_count):
@@ -78,54 +103,34 @@ def index():
 def calendar_view():
     year = request.args.get('year', datetime.now().year, type=int)
     month = request.args.get('month', datetime.now().month, type=int)
-    
-    # 해당 월의 일정 가져오기
-    conn = sqlite3.connect('schedule.db')
-    cursor = conn.cursor()
-    cursor.execute('''
-        SELECT date, time, center, people_count, amount 
-        FROM schedules 
-        WHERE strftime('%Y-%m', date) = ?
-        ORDER BY date, time, center
-    ''', (f'{year:04d}-{month:02d}',))
-    
+
+    # 해당 월의 일정 가져오기 (ORM)
     schedules = {}
-    for row in cursor.fetchall():
-        day = int(row[0].split('-')[2])  # 문자열이 아닌 int로 변환
+    schedule_objs = Schedule.query.filter(
+        Schedule.date.like(f'{year:04d}-{month:02d}-%')
+    ).order_by(Schedule.date, Schedule.time, Schedule.center).all()
+    for row in schedule_objs:
+        day = int(row.date.split('-')[2])
         if day not in schedules:
             schedules[day] = []
         schedules[day].append({
-            'time': row[1],
-            'center': row[2],
-            'people_count': row[3],
-            'amount': row[4]
+            'time': row.time,
+            'center': row.center,
+            'people_count': row.people_count,
+            'amount': row.amount
         })
-    
-    # 센터 목록 가져오기
-    cursor.execute('SELECT center_name FROM center_pricing ORDER BY center_name')
-    centers = [row[0] for row in cursor.fetchall()]
-    
-    # 센터가 없으면 기본 센터들 추가
+
+    # 센터 목록 가져오기 (ORM)
+    centers = [c.center_name for c in CenterPricing.query.order_by(CenterPricing.center_name).all()]
     if not centers:
-        print("센터 목록이 비어있어 기본 센터들을 추가합니다.")
-        cursor.execute('INSERT OR IGNORE INTO center_pricing (center_name, base_people, above_amount, below_amount) VALUES (?, ?, ?, ?)', ('구래', 2, 30000, 15000))
-        cursor.execute('INSERT OR IGNORE INTO center_pricing (center_name, base_people, above_amount, below_amount) VALUES (?, ?, ?, ?)', ('사우', 2, 30000, 15000))
-        cursor.execute('INSERT OR IGNORE INTO center_pricing (center_name, base_people, above_amount, below_amount) VALUES (?, ?, ?, ?)', ('마곡', 2, 30000, 15000))
-        conn.commit()
-        
-        # 다시 센터 목록 가져오기
-        cursor.execute('SELECT center_name FROM center_pricing ORDER BY center_name')
-        centers = [row[0] for row in cursor.fetchall()]
-    
-    print(f"사용 가능한 센터 목록: {centers}")  # 디버깅용
-    
-    conn.close()
-    
-    # 달력의 첫 요일을 일요일로 설정
-    calendar.setfirstweekday(calendar.SUNDAY)
+        # 기본 센터 추가
+        for name in ['구래', '사우', '마곡']:
+            db.session.add(CenterPricing(center_name=name))
+        db.session.commit()
+        centers = [c.center_name for c in CenterPricing.query.order_by(CenterPricing.center_name).all()]
+
     cal = calendar.monthcalendar(year, month)
     month_name = calendar.month_name[month]
-    
     return render_template('calendar.html', 
                          calendar=cal, 
                          year=year, 
@@ -139,39 +144,16 @@ def calendar_view():
 def settlement_view():
     year = request.args.get('year', datetime.now().year, type=int)
     month = request.args.get('month', datetime.now().month, type=int)
-    
-    conn = sqlite3.connect('schedule.db')
-    cursor = conn.cursor()
-    
-    # 센터별 기준인원 금액 설정 가져오기
-    cursor.execute('''
-        SELECT center_name, base_people, above_amount, below_amount 
-        FROM center_pricing 
-        ORDER BY center_name
-    ''')
-    center_pricing = cursor.fetchall()
-    
-    # 해당 월의 일정별 합산
-    cursor.execute('''
-        SELECT center, SUM(amount) as total_amount, COUNT(*) as count
-        FROM schedules 
-        WHERE strftime('%Y-%m', date) = ?
-        GROUP BY center
-    ''', (f'{year:04d}-{month:02d}',))
-    
-    monthly_summary = cursor.fetchall()
-    print(f"월별 요약 데이터: {monthly_summary}")  # 디버깅용
-    
-    # 총합 계산
-    try:
-        total_amount = sum(row[1] for row in monthly_summary) if monthly_summary else 0
-        print(f"계산된 총합: {total_amount}")  # 디버깅용
-    except Exception as e:
-        print(f"총합 계산 에러: {e}")  # 디버깅용
-        total_amount = 0
-    
-    conn.close()
-    
+
+    center_pricing = CenterPricing.query.order_by(CenterPricing.center_name).all()
+    # 월별 합산
+    monthly_summary = db.session.query(
+        Schedule.center,
+        db.func.sum(Schedule.amount),
+        db.func.count()
+    ).filter(Schedule.date.like(f'{year:04d}-{month:02d}-%')).group_by(Schedule.center).all()
+    total_amount = sum(row[1] for row in monthly_summary) if monthly_summary else 0
+
     return render_template('settlement.html',
                          year=year,
                          month=month,
@@ -179,161 +161,108 @@ def settlement_view():
                          monthly_summary=monthly_summary,
                          total_amount=total_amount)
 
-# 일정 추가 API
-@app.route('/api/schedule', methods=['POST'])
-def add_schedule():
+# 일정 추가 API (여러 날짜)
+@app.route('/api/schedule/bulk', methods=['POST'])
+def add_schedule_bulk():
     data = request.json
-    print(f"받은 데이터: {data}")  # 디버깅용
-    
+    dates = data.get('dates', [])
+    time = data.get('time', '')
+    center = data.get('center', '구래')
+    people_count = data.get('people_count', 1)
     try:
-        conn = sqlite3.connect('schedule.db')
-        cursor = conn.cursor()
-        
-        people_count = data.get('people_count', 1)
-        center = data.get('center', '구래')
-        amount = calculate_amount(center, people_count)
-        
-        print(f"센터: {center}, 인원: {people_count}, 금액: {amount}")  # 디버깅용
-        
-        cursor.execute('''
-            INSERT INTO schedules (date, time, center, people_count, amount)
-            VALUES (?, ?, ?, ?, ?)
-        ''', (data['date'], data.get('time', ''), data.get('center', '구래'), 
-              people_count, amount))
-        
-        conn.commit()
-        conn.close()
-        
-        print("일정 저장 성공")  # 디버깅용
+        for date_str in dates:
+            amount = calculate_amount(center, people_count)
+            new_schedule = Schedule(date=date_str, time=time, center=center, people_count=people_count, amount=amount)
+            db.session.add(new_schedule)
+        db.session.commit()
         return jsonify({'success': True})
     except Exception as e:
-        print(f"에러 발생: {e}")  # 디버깅용
+        db.session.rollback()
         return jsonify({'success': False, 'error': str(e)}), 500
 
 # 일정 수정 API
 @app.route('/api/schedule/update/<int:schedule_id>', methods=['PUT'])
 def update_schedule(schedule_id):
     data = request.json
-    print(f"수정 데이터: {data}")  # 디버깅용
-    
     try:
-        conn = sqlite3.connect('schedule.db')
-        cursor = conn.cursor()
-        
-        people_count = data.get('people_count', 1)
-        center = data.get('center', '구래')
-        amount = calculate_amount(center, people_count)
-        
-        cursor.execute('''
-            UPDATE schedules 
-            SET date=?, time=?, center=?, people_count=?, amount=?
-            WHERE id=?
-        ''', (data['date'], data.get('time', ''), data.get('center', '구래'), 
-              people_count, amount, schedule_id))
-        
-        conn.commit()
-        conn.close()
-        
-        print("일정 수정 성공")  # 디버깅용
+        schedule = Schedule.query.get(schedule_id)
+        if not schedule:
+            return jsonify({'success': False, 'error': '일정이 존재하지 않습니다.'}), 404
+        schedule.date = data['date']
+        schedule.time = data.get('time', '')
+        schedule.center = data.get('center', '구래')
+        schedule.people_count = data.get('people_count', 1)
+        schedule.amount = calculate_amount(schedule.center, schedule.people_count)
+        db.session.commit()
         return jsonify({'success': True})
     except Exception as e:
-        print(f"수정 에러: {e}")  # 디버깅용
+        db.session.rollback()
         return jsonify({'success': False, 'error': str(e)}), 500
 
 # 일정 삭제 API
 @app.route('/api/schedule/delete/<int:schedule_id>', methods=['DELETE'])
 def delete_schedule(schedule_id):
-    conn = sqlite3.connect('schedule.db')
-    cursor = conn.cursor()
-    
-    cursor.execute('DELETE FROM schedules WHERE id=?', (schedule_id,))
-    
-    conn.commit()
-    conn.close()
-    
-    return jsonify({'success': True})
+    try:
+        schedule = Schedule.query.get(schedule_id)
+        if not schedule:
+            return jsonify({'success': False, 'error': '일정이 존재하지 않습니다.'}), 404
+        db.session.delete(schedule)
+        db.session.commit()
+        return jsonify({'success': True})
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'success': False, 'error': str(e)}), 500
 
 # 특정 날짜의 일정 가져오기 API
 @app.route('/api/schedule/date/<date>')
 def get_schedules_by_date(date):
-    print(f"요청된 날짜: {date}")  # 디버깅용
-    
-    conn = sqlite3.connect('schedule.db')
-    cursor = conn.cursor()
-    
-    cursor.execute('''
-        SELECT id, date, time, center, people_count, amount
-        FROM schedules 
-        WHERE date = ?
-        ORDER BY time
-    ''', (date,))
-    
-    schedules = []
-    for row in cursor.fetchall():
-        schedule_data = {
-            'id': row[0],
-            'date': row[1],
-            'time': row[2],
-            'center': row[3],
-            'people_count': row[4],
-            'amount': row[5]
-        }
-        schedules.append(schedule_data)
-        print(f"일정 데이터: {schedule_data}")  # 디버깅용
-    
-    conn.close()
-    
-    print(f"반환할 일정들: {schedules}")  # 디버깅용
-    return jsonify(schedules)
+    schedules = Schedule.query.filter_by(date=date).order_by(Schedule.time).all()
+    result = []
+    for row in schedules:
+        result.append({
+            'id': row.id,
+            'date': row.date,
+            'time': row.time,
+            'center': row.center,
+            'people_count': row.people_count,
+            'amount': row.amount
+        })
+    return jsonify(result)
 
 # 특정 일정 ID로 일정 가져오기 API
 @app.route('/api/schedule/detail/<int:schedule_id>')
 def get_schedule_by_id(schedule_id):
-    print(f"요청된 일정 ID: {schedule_id}")  # 디버깅용
-    
-    conn = sqlite3.connect('schedule.db')
-    cursor = conn.cursor()
-    
-    cursor.execute('''
-        SELECT id, date, time, center, people_count, amount
-        FROM schedules 
-        WHERE id = ?
-    ''', (schedule_id,))
-    
-    row = cursor.fetchone()
+    row = Schedule.query.get(schedule_id)
     if row:
         schedule_data = {
-            'id': row[0],
-            'date': row[1],
-            'time': row[2],
-            'center': row[3],
-            'people_count': row[4],
-            'amount': row[5]
+            'id': row.id,
+            'date': row.date,
+            'time': row.time,
+            'center': row.center,
+            'people_count': row.people_count,
+            'amount': row.amount
         }
-        print(f"찾은 일정: {schedule_data}")  # 디버깅용
-        conn.close()
         return jsonify(schedule_data)
     else:
-        print(f"일정 ID {schedule_id}를 찾을 수 없습니다")  # 디버깅용
-        conn.close()
         return jsonify({'error': '일정을 찾을 수 없습니다'}), 404
 
 # 센터별 기준인원 금액 설정 API
 @app.route('/api/center-pricing', methods=['POST'])
 def update_center_pricing():
     data = request.json
-    conn = sqlite3.connect('schedule.db')
-    cursor = conn.cursor()
-    
-    cursor.execute('''
-        INSERT OR REPLACE INTO center_pricing (center_name, base_people, above_amount, below_amount)
-        VALUES (?, ?, ?, ?)
-    ''', (data['center_name'], data['base_people'], data['above_amount'], data['below_amount']))
-    
-    conn.commit()
-    conn.close()
-    
-    return jsonify({'success': True})
+    try:
+        center = CenterPricing.query.filter_by(center_name=data['center_name']).first()
+        if not center:
+            center = CenterPricing(center_name=data['center_name'])
+            db.session.add(center)
+        center.base_people = data['base_people']
+        center.above_amount = data['above_amount']
+        center.below_amount = data['below_amount']
+        db.session.commit()
+        return jsonify({'success': True})
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'success': False, 'error': str(e)}), 500
 
 # 금액 계산 API
 @app.route('/api/calculate-amount', methods=['POST'])
@@ -346,33 +275,17 @@ def calculate_amount_api():
     
     return jsonify({'success': True, 'amount': amount})
 
-# 일정 일괄 등록 API
-@app.route('/api/schedule/bulk', methods=['POST'])
-def add_schedule_bulk():
-    data = request.json
-    dates = data.get('dates', [])
-    time = data.get('time', '')
-    center = data.get('center', '구래')
-    people_count = data.get('people_count', 1)
-    amount = data.get('amount', 15000)
+@app.route('/test-db')
+def test_db():
     try:
-        conn = sqlite3.connect('schedule.db')
-        cursor = conn.cursor()
-        for date_str in dates:
-            # 금액 재계산 (혹시 프론트에서 잘못된 값이 올 수 있으므로)
-            calc_amount = calculate_amount(center, people_count)
-            cursor.execute('''
-                INSERT INTO schedules (date, time, center, people_count, amount)
-                VALUES (?, ?, ?, ?, ?)
-            ''', (date_str, time, center, people_count, calc_amount))
-        conn.commit()
-        conn.close()
-        return jsonify({'success': True})
+        result = db.session.execute(text('SELECT * FROM schedules LIMIT 5')).fetchall()
+        return '<br>'.join(str(row) for row in result) or 'No data found.'
     except Exception as e:
-        print(f"일괄 등록 에러: {e}")
-        return jsonify({'success': False, 'error': str(e)}), 500
+        return f'Error: {e}'
 
 if __name__ == '__main__':
+    with app.app_context():
+        db.create_all()
     init_db()
     port = int(os.environ.get('PORT', 10000))
     app.run(host='0.0.0.0', port=port) 
