@@ -34,26 +34,13 @@ class CenterPricing(db.Model):
 
 # 센터별 기준인원에 따른 금액 계산 함수
 def calculate_amount(center, people_count):
-    conn = sqlite3.connect('schedule.db')
-    cursor = conn.cursor()
-    
-    # 해당 센터의 기준인원 금액 설정 가져오기
-    cursor.execute('''
-        SELECT base_people, above_amount, below_amount 
-        FROM center_pricing 
-        WHERE center_name = ?
-    ''', (center,))
-    
-    result = cursor.fetchone()
-    conn.close()
-    
-    if result:
-        base_people, above_amount, below_amount = result
-        # 기준인원 이상이면 above_amount, 미만이면 below_amount 반환
+    center_obj = CenterPricing.query.filter_by(center_name=center).first()
+    if center_obj:
+        base_people = center_obj.base_people
+        above_amount = center_obj.above_amount
+        below_amount = center_obj.below_amount
         return above_amount if people_count >= base_people else below_amount
-    
-    # 기본값 반환
-    return 15000
+    return 15000  # 기본값
 
 # 데이터베이스 초기화
 def init_db():
