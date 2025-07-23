@@ -40,7 +40,7 @@ def calculate_amount(center, people_count):
         above_amount = center_obj.above_amount
         below_amount = center_obj.below_amount
         return above_amount if people_count >= base_people else below_amount
-    return 15000  # 기본값
+    return 30000  # 기본값
 
 # 데이터베이스 초기화
 def init_db():
